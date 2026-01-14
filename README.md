@@ -22,7 +22,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-1. サーバーURLを設定（デフォルト: http://localhost:5000）
+1. サーバーURLを設定（デフォルト: https://test2.eterpix.uk）
 2. ユーザー登録またはログイン
 3. 「監視開始」ボタンをクリック
 4. VRChatでスクリーンショットを撮影すると自動アップロード
@@ -36,7 +36,7 @@ python main.py
 
 | 項目 | 説明 | デフォルト |
 |------|------|-----------|
-| server_url | サーバーURL | http://localhost:5000 |
+| server_url | サーバーURL | https://test2.eterpix.uk |
 | watch_folder | 監視フォルダ | Pictures/VRChat |
 | auto_upload | 自動アップロード | true |
 | jpeg_quality | JPEG品質 | 85 |
@@ -68,7 +68,7 @@ pip install pyinstaller
 pyinstaller --onefile --windowed --name "EterPix VRC Uploader" main.py
 ```
 
-## appファイルのexeについて
+## exeフォルダのexeについて
 ファイルは作者がビルドしました
 WindowsによってPCが保護されました。が出る原因
 

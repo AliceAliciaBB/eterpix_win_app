@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QLineEdit, QComboBox,
     QGroupBox, QStatusBar, QSystemTrayIcon, QMenu,
-    QMessageBox, QFileDialog
+    QMessageBox, QFileDialog, QApplication
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QAction
@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
 
         quit_action = QAction("終了", self)
-        quit_action.triggered.connect(self.close)
+        quit_action.triggered.connect(self._quit_app)
         menu.addAction(quit_action)
 
         self.tray.setContextMenu(menu)
@@ -374,6 +374,11 @@ class MainWindow(QMainWindow):
             self.show()
             self.activateWindow()
 
+    def _quit_app(self):
+        """アプリケーション終了"""
+        self.app.stop_watching()
+        QApplication.quit()
+
     def closeEvent(self, event):
         """ウィンドウクローズ"""
         if self.app.config.minimize_to_tray and self.tray.isVisible():
@@ -382,3 +387,4 @@ class MainWindow(QMainWindow):
         else:
             self.app.stop_watching()
             event.accept()
+            QApplication.quit()

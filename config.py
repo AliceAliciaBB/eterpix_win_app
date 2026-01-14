@@ -15,7 +15,7 @@ class AppConfig:
     """アプリケーション設定"""
 
     # サーバー設定
-    server_url: str = "http://localhost:5000"
+    server_url: str = "https://test2.eterpix.uk"
 
     # 監視設定
     watch_folder: str = ""  # 空の場合はデフォルトパス
