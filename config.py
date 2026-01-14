@@ -29,7 +29,7 @@ class AppConfig:
 
     # UI設定
     auto_start: bool = False
-    minimize_to_tray: bool = True
+    minimize_to_tray: bool = False  # トレイアイコン未実装のため無効
     notifications_enabled: bool = True
 
     # 認証情報（トークン保存）

@@ -8,7 +8,14 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 from queue import Queue
+from datetime import datetime
 from PIL import Image
+
+
+def _log(msg: str):
+    """ログ出力"""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] [Watcher] {msg}", flush=True)
 
 try:
     from watchdog.observers import Observer
@@ -92,33 +99,48 @@ class ScreenshotWatcher:
     def start(self, watch_path: Optional[Path] = None):
         """監視開始"""
         if not WATCHDOG_AVAILABLE:
-            print("watchdogが利用できません")
+            _log("watchdogが利用できません")
             return
 
         if self._running:
+            _log("Already running, stopping first...")
             self.stop()
 
         path = watch_path or self.get_vrchat_pictures_path()
 
         if not path.exists():
-            print(f"監視パスが存在しません: {path}")
+            _log(f"監視パスが存在しません: {path}")
             return
 
         handler = VRChatScreenshotHandler(self.queue)
         self.observer = Observer()
+        self.observer.daemon = True  # デーモンスレッドに設定
         self.observer.schedule(handler, str(path), recursive=True)
         self.observer.start()
         self._running = True
 
-        print(f"監視開始: {path}")
+        _log(f"監視開始: {path}")
+        _log(f"Observer thread: {self.observer.name}, daemon={self.observer.daemon}")
 
     def stop(self):
         """監視停止"""
+        _log(f"stop() called, observer={self.observer}, running={self._running}")
         if self.observer and self._running:
+            _log("Calling observer.stop()...")
             self.observer.stop()
-            self.observer.join(timeout=2)
             self._running = False
-            print("監視停止")
+
+            _log("Calling observer.join(timeout=1)...")
+            try:
+                self.observer.join(timeout=1)
+                _log(f"Observer joined, is_alive={self.observer.is_alive()}")
+            except Exception as e:
+                _log(f"Observer join failed: {e}")
+
+            self.observer = None
+            _log("監視停止完了")
+        else:
+            _log("Nothing to stop")
 
     def get_pending_files(self) -> list:
         """保留中のファイルを取得"""

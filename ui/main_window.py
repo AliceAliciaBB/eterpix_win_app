@@ -23,7 +23,8 @@ class MainWindow(QMainWindow):
         self.app.add_callback(self._on_app_event)
 
         self._setup_ui()
-        self._setup_tray()
+        # self._setup_tray()  # トレイアイコン未実装
+        self.tray = None
         self._update_ui()
 
     def _setup_ui(self):
@@ -156,6 +157,18 @@ class MainWindow(QMainWindow):
         server_status_row.addWidget(self.server_check_btn)
         status_layout.addLayout(server_status_row)
 
+        # 送信待ちキュー状態
+        queue_row = QHBoxLayout()
+        self.queue_label = QLabel("送信待ち: 0件")
+        self.queue_label.setStyleSheet("color: #888;")
+        queue_row.addWidget(self.queue_label)
+
+        self.resend_btn = QPushButton("再送信")
+        self.resend_btn.clicked.connect(self._on_resend)
+        self.resend_btn.setEnabled(False)
+        queue_row.addWidget(self.resend_btn)
+        status_layout.addLayout(queue_row)
+
         layout.addWidget(status_group)
 
         # ===== アップロード履歴 =====
@@ -228,6 +241,9 @@ class MainWindow(QMainWindow):
             self.watch_status.setStyleSheet("color: #888;")
             self.watch_btn.setText("監視開始")
 
+        # キュー状態
+        self._refresh_queue_display()
+
     def _on_app_event(self, event_type: str, data: dict):
         """アプリイベント処理"""
         if event_type == 'status':
@@ -254,6 +270,27 @@ class MainWindow(QMainWindow):
         elif event_type == 'user_changed':
             name = data.get('display_name', '-')
             self.vrc_user_label.setText(f"VRChatユーザー: {name}")
+
+        elif event_type == 'photo_queued':
+            count = data.get('pending_count', 0)
+            self._update_queue_display(count)
+
+        elif event_type == 'queue_item_sent':
+            self._refresh_queue_display()
+
+        elif event_type == 'queue_processed':
+            remaining = data.get('remaining_photos', 0)
+            self._update_queue_display(remaining)
+
+        elif event_type == 'offline_mode':
+            is_offline = data.get('is_offline', False)
+            if is_offline:
+                self.server_status_label.setText("サーバー: オフライン")
+                self.server_status_label.setStyleSheet("color: #F44336;")
+            else:
+                self.server_status_label.setText("サーバー: オンライン")
+                self.server_status_label.setStyleSheet("color: #4CAF50;")
+            self._refresh_queue_display()
 
     def _on_login(self):
         """ログイン"""
@@ -368,6 +405,36 @@ class MainWindow(QMainWindow):
 
         asyncio.create_task(do_check())
 
+    def _on_resend(self):
+        """再送信ボタン"""
+        self.resend_btn.setEnabled(False)
+        self.statusbar.showMessage("再送信中...")
+
+        async def do_resend():
+            try:
+                await self.app.force_resend()
+                self._refresh_queue_display()
+            finally:
+                self.resend_btn.setEnabled(True)
+
+        asyncio.create_task(do_resend())
+
+    def _update_queue_display(self, count: int):
+        """キュー表示を更新"""
+        self.queue_label.setText(f"送信待ち: {count}件")
+        if count > 0:
+            self.queue_label.setStyleSheet("color: #FF9800;")
+            self.resend_btn.setEnabled(True)
+        else:
+            self.queue_label.setStyleSheet("color: #888;")
+            self.resend_btn.setEnabled(False)
+
+    def _refresh_queue_display(self):
+        """キュー表示を最新に更新"""
+        counts = self.app.get_pending_counts()
+        total = counts.get('photos', 0) + counts.get('worlds', 0)
+        self._update_queue_display(total)
+
     def _on_tray_activated(self, reason):
         """トレイアイコンクリック"""
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
@@ -376,15 +443,23 @@ class MainWindow(QMainWindow):
 
     def _quit_app(self):
         """アプリケーション終了"""
+        print("[MainWindow] _quit_app called", flush=True)
+        self._do_quit()
+
+    def _do_quit(self):
+        """実際の終了処理"""
+        import sys
+        import os
+        print("[MainWindow] _do_quit: stopping watcher...", flush=True)
         self.app.stop_watching()
+        print("[MainWindow] _do_quit: calling QApplication.quit()...", flush=True)
         QApplication.quit()
+        print("[MainWindow] _do_quit: calling sys.exit(0)...", flush=True)
+        # qasync イベントループを確実に終了させる
+        sys.exit(0)
 
     def closeEvent(self, event):
         """ウィンドウクローズ"""
-        if self.app.config.minimize_to_tray and self.tray.isVisible():
-            self.hide()
-            event.ignore()
-        else:
-            self.app.stop_watching()
-            event.accept()
-            QApplication.quit()
+        print("[MainWindow] closeEvent: quitting app", flush=True)
+        event.accept()
+        self._do_quit()

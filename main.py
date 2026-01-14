@@ -4,8 +4,10 @@ VRC Uploader - VRChat Screenshot Uploader for EterPix
 """
 
 import sys
+import os
 import asyncio
 import qasync
+import threading
 from pathlib import Path
 from queue import Queue
 from datetime import datetime
@@ -24,6 +26,22 @@ from config import AppConfig
 
 # 定数
 HEALTH_CHECK_INTERVAL_MS = 10 * 60 * 1000  # 10分
+DEBUG_LOG_INTERVAL_MS = 5000  # 5秒ごとにデバッグログ
+
+
+def log_debug(msg: str):
+    """デバッグログ出力"""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] {msg}", flush=True)
+
+
+def log_active_threads():
+    """アクティブなスレッドをログ出力"""
+    threads = threading.enumerate()
+    log_debug(f"=== Active threads: {len(threads)} ===")
+    for t in threads:
+        log_debug(f"  - {t.name} (daemon={t.daemon}, alive={t.is_alive()})")
+    return len(threads)
 
 
 class VRCUploaderApp:
@@ -69,16 +87,22 @@ class VRCUploaderApp:
     def process_pending_tasks(self):
         """保留中のタスクを処理（タイマーから呼ばれる）"""
         # 非同期タスクを処理
+        task_count = 0
         while not self._task_queue.empty():
             try:
                 coro = self._task_queue.get_nowait()
                 asyncio.ensure_future(coro)
+                task_count += 1
             except Exception as e:
-                print(f"Task scheduling error: {e}")
+                print(f"Task scheduling error: {e}", flush=True)
 
         # スクリーンショットキューを処理
-        for path in self.watcher.get_pending_files():
+        files = self.watcher.get_pending_files()
+        for path in files:
             asyncio.ensure_future(self._on_new_screenshot(path))
+
+        if task_count > 0 or files:
+            log_debug(f"Processed {task_count} tasks, {len(files)} files")
 
     async def _on_new_screenshot(self, path: Path):
         """新しいスクリーンショット検出時"""
@@ -151,6 +175,8 @@ class VRCUploaderApp:
             'filename': filename,
             'pending_count': counts['photos']
         })
+        # キューに追加後、すぐに送信を試みる
+        self._schedule_task(self.try_send_queue())
 
     def _set_offline(self):
         """オフラインモードに設定"""
@@ -308,6 +334,53 @@ class VRCUploaderApp:
         except Exception as e:
             print(f"Health check error: {e}")
 
+    async def try_send_queue(self):
+        """キューにデータがあればサーバー確認して送信を試みる"""
+        if not self.uploader.token:
+            return
+
+        # キューが空なら何もしない
+        counts = self.offline_queue.get_queue_counts()
+        if counts['photos'] == 0 and counts['worlds'] == 0:
+            return
+
+        # サーバー確認して送信
+        try:
+            is_alive = await self.uploader.health_check()
+            if is_alive:
+                self._set_online()
+                await self._process_offline_queue()
+        except Exception as e:
+            print(f"Queue send check error: {e}")
+
+    async def force_resend(self):
+        """手動で再送信を試みる（UIの再送ボタン用）"""
+        if not self.uploader.token:
+            self.notify('status', {'message': 'ログインしていません'})
+            return False
+
+        counts = self.offline_queue.get_queue_counts()
+        if counts['photos'] == 0 and counts['worlds'] == 0:
+            self.notify('status', {'message': '送信待ちデータがありません'})
+            return True
+
+        self.notify('status', {'message': 'サーバー確認中...'})
+
+        try:
+            is_alive = await self.uploader.health_check()
+            if is_alive:
+                self._set_online()
+                self.notify('status', {'message': '再送信中...'})
+                await self._process_offline_queue()
+                self.notify('status', {'message': '再送信完了'})
+                return True
+            else:
+                self.notify('status', {'message': 'サーバーに接続できません'})
+                return False
+        except Exception as e:
+            self.notify('status', {'message': f'再送信エラー: {e}'})
+            return False
+
     async def _process_offline_queue(self):
         """オフラインキューを処理して送信"""
         if not self.uploader.token:
@@ -376,6 +449,9 @@ class VRCUploaderApp:
 
 def main():
     """エントリーポイント"""
+    log_debug("=== Application starting ===")
+    log_active_threads()
+
     app = QApplication(sys.argv)
     app.setApplicationName("EterPix VRC Uploader")
     app.setOrganizationName("EterPix")
@@ -383,8 +459,11 @@ def main():
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
 
+    log_debug("Event loop created")
+
     # アプリケーション初期化
     uploader_app = VRCUploaderApp()
+    log_debug("App initialized")
 
     # メインウィンドウ
     window = MainWindow(uploader_app)
@@ -400,13 +479,24 @@ def main():
     task_timer.timeout.connect(uploader_app.process_pending_tasks)
     task_timer.start(100)
 
-    # ヘルスチェックタイマー（10分ごと）
+    # ヘルスチェック＆キュー送信タイマー（10分ごと）
     def schedule_health_check():
-        asyncio.ensure_future(uploader_app.check_server_health())
+        asyncio.ensure_future(uploader_app.try_send_queue())
 
     health_timer = QTimer()
     health_timer.timeout.connect(schedule_health_check)
     health_timer.start(HEALTH_CHECK_INTERVAL_MS)
+
+    # デバッグログタイマー（5秒ごと）
+    def debug_log_tick():
+        thread_count = log_active_threads()
+        log_debug(f"Watcher running: {uploader_app.watcher.is_running}")
+        log_debug(f"Task queue size: {uploader_app._task_queue.qsize()}")
+
+    debug_timer = QTimer()
+    debug_timer.timeout.connect(debug_log_tick)
+    debug_timer.start(DEBUG_LOG_INTERVAL_MS)
+    log_debug("All timers started")
 
     # 保存されたトークンでログイン復元
     if uploader_app.config.saved_token:
@@ -416,14 +506,45 @@ def main():
     if uploader_app.offline_queue.has_pending_data():
         uploader_app._is_offline = True
         uploader_app.notify('offline_mode', {'is_offline': True})
-        # 起動後すぐにヘルスチェック
+        # 起動後すぐにキュー送信試行
         QTimer.singleShot(3000, schedule_health_check)
 
-    with loop:
-        loop.run_forever()
+    # アプリケーション終了時のクリーンアップ
+    def on_quit():
+        log_debug("=== on_quit called ===")
+        log_active_threads()
 
-    # クリーンアップ
-    loop.run_until_complete(uploader_app.uploader.close())
+        log_debug("Stopping watcher...")
+        uploader_app.stop_watching()
+
+        log_debug("Stopping timers...")
+        log_timer.stop()
+        task_timer.stop()
+        health_timer.stop()
+        debug_timer.stop()
+
+        log_debug("Stopping event loop...")
+        loop.stop()
+
+        log_debug("on_quit completed")
+        log_active_threads()
+
+    app.aboutToQuit.connect(on_quit)
+
+    log_debug("=== Starting event loop ===")
+
+    try:
+        with loop:
+            loop.run_forever()
+    except SystemExit:
+        log_debug("SystemExit caught")
+    except Exception as e:
+        log_debug(f"Exception in event loop: {e}")
+    finally:
+        log_debug("=== Finally block - forcing exit ===")
+        log_active_threads()
+        # 確実に終了
+        os._exit(0)
 
 
 if __name__ == '__main__':
