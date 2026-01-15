@@ -23,6 +23,7 @@ from core.log_parser import VRChatLogParser
 from core.image_processor import ImageProcessor
 from core.uploader import UploaderClient
 from core.offline_queue import OfflineQueueManager
+from core.osc_handler import OSCHandler
 from config import AppConfig
 
 
@@ -66,6 +67,10 @@ class VRCUploaderApp:
         self.processor = ImageProcessor(jpeg_quality=self.config.jpeg_quality)
         self.uploader = UploaderClient(self.config.server_url)
         self.offline_queue = OfflineQueueManager()
+        self.osc_handler = OSCHandler(
+            send_port=self.config.osc_send_port,
+            recv_port=self.config.osc_recv_port
+        )
 
         self._callbacks = []
         self._task_queue = Queue()  # 非同期タスク用キュー
@@ -79,6 +84,9 @@ class VRCUploaderApp:
         self.log_parser.on_world_left(self._on_world_left)
         # VRCユーザー名・ID取得は無効化
         # self.log_parser.on_user_changed(self._on_user_changed)
+
+        # OSC公開範囲変更コールバック
+        self.osc_handler.on_visibility_changed(self._on_osc_visibility_changed)
 
     def add_callback(self, callback):
         """UIコールバックを追加"""
@@ -260,6 +268,12 @@ class VRCUploaderApp:
             })
         self._schedule_task(self._report_leave())
 
+    def _on_osc_visibility_changed(self, visibility: str):
+        """OSC経由で公開範囲が変更された時"""
+        self.config.default_visibility = visibility
+        self.config.save()
+        self.notify('osc_visibility_changed', {'visibility': visibility})
+
     async def _report_leave(self):
         """インスタンス退出を報告（サーバー側で現在地をNULLに設定）"""
         if self.uploader.token:
@@ -287,6 +301,25 @@ class VRCUploaderApp:
         """監視停止"""
         self.watcher.stop()
         self.notify('status', {'message': '監視停止'})
+
+    # ========== OSC関連 ==========
+
+    def start_osc(self):
+        """OSC通信開始"""
+        self.osc_handler.start()
+        # 現在の公開範囲を送信
+        self.osc_handler.send_visibility(self.config.default_visibility)
+        self.notify('osc_started', {'is_running': True})
+
+    def stop_osc(self):
+        """OSC通信停止"""
+        self.osc_handler.stop()
+        self.notify('osc_stopped', {'is_running': False})
+
+    def send_visibility_to_vrc(self, visibility: str):
+        """公開範囲をVRCに送信"""
+        if self.osc_handler.is_running:
+            self.osc_handler.send_visibility(visibility)
 
     async def login(self, username: str, password: str) -> dict:
         """ログイン"""
@@ -587,6 +620,11 @@ def main():
         uploader_app.start_watching()
         window._update_ui()
 
+    # 保存されたOSC状態を復元
+    if uploader_app.config.osc_enabled:
+        uploader_app.start_osc()
+        window._update_ui()
+
     # 起動時に保留中のキューがあれば確認
     if uploader_app.offline_queue.has_pending_data():
         uploader_app._is_offline = True
@@ -604,6 +642,9 @@ def main():
 
         log_debug("Stopping watcher...")
         uploader_app.stop_watching()
+
+        log_debug("Stopping OSC...")
+        uploader_app.stop_osc()
 
         log_debug("Stopping timers...")
         log_timer.stop()

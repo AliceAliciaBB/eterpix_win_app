@@ -153,6 +153,39 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(settings_group)
 
+        # ===== OSCセクション =====
+        osc_group = QGroupBox("OSC (VRC公開範囲連携)")
+        osc_layout = QVBoxLayout(osc_group)
+
+        # OSC状態と開始/停止ボタン
+        osc_ctrl_row = QHBoxLayout()
+        self.osc_status_label = QLabel("OSC: 停止中")
+        self.osc_status_label.setStyleSheet("color: #888;")
+        osc_ctrl_row.addWidget(self.osc_status_label)
+
+        self.osc_btn = QPushButton("OSC開始")
+        self.osc_btn.clicked.connect(self._on_toggle_osc)
+        osc_ctrl_row.addWidget(self.osc_btn)
+        osc_layout.addLayout(osc_ctrl_row)
+
+        # OSC受信値表示
+        self.osc_recv_label = QLabel("受信値: -")
+        self.osc_recv_label.setStyleSheet("color: #888;")
+        osc_layout.addWidget(self.osc_recv_label)
+
+        # OSC説明
+        osc_help = QLabel(
+            "送信パラメータ: EterPixVisibility (int)\n"
+            "  100=待機, 101=自分のみ, 102=フレンド, 103=インスタンス&フレンド, 104=インスタンス, 105=パブリック\n"
+            "受信パラメータ: EterPixVisibilitySelect (int)\n"
+            "  1=自分のみ, 2=フレンド, 3=インスタンス&フレンド, 4=インスタンス, 5=パブリック"
+        )
+        osc_help.setStyleSheet("color: #666; font-size: 10px;")
+        osc_help.setWordWrap(True)
+        osc_layout.addWidget(osc_help)
+
+        layout.addWidget(osc_group)
+
         # ===== 状態セクション =====
         status_group = QGroupBox("状態")
         status_layout = QVBoxLayout(status_group)
@@ -279,6 +312,9 @@ class MainWindow(QMainWindow):
         # キュー状態
         self._refresh_queue_display()
 
+        # OSC状態
+        self._update_osc_display()
+
     def _on_app_event(self, event_type: str, data: dict):
         """アプリイベント処理"""
         if event_type == 'status':
@@ -326,6 +362,26 @@ class MainWindow(QMainWindow):
                 self.server_status_label.setText("サーバー: オンライン")
                 self.server_status_label.setStyleSheet("color: #4CAF50;")
             self._refresh_queue_display()
+
+        elif event_type == 'osc_visibility_changed':
+            # OSC経由で公開範囲が変更された
+            visibility = data.get('visibility', '')
+            # コンボボックスを更新
+            idx = self.visibility_combo.findData(visibility)
+            if idx >= 0:
+                self.visibility_combo.blockSignals(True)
+                self.visibility_combo.setCurrentIndex(idx)
+                self.visibility_combo.blockSignals(False)
+            self.statusbar.showMessage(f"OSC: 公開範囲を {visibility} に変更")
+            self._update_osc_recv_display()
+
+        elif event_type == 'osc_started':
+            self._update_osc_display()
+            self.statusbar.showMessage("OSC開始")
+
+        elif event_type == 'osc_stopped':
+            self._update_osc_display()
+            self.statusbar.showMessage("OSC停止")
 
     def _on_login(self):
         """ログイン"""
@@ -408,6 +464,8 @@ class MainWindow(QMainWindow):
         value = self.visibility_combo.currentData()
         self.app.config.default_visibility = value
         self.app.config.save()
+        # OSCにも送信
+        self.app.send_visibility_to_vrc(value)
 
     def _update_startup_button(self):
         """スタートアップボタンの表示を更新"""
@@ -495,6 +553,40 @@ class MainWindow(QMainWindow):
         counts = self.app.get_pending_counts()
         total = counts.get('photos', 0) + counts.get('worlds', 0)
         self._update_queue_display(total)
+
+    def _on_toggle_osc(self):
+        """OSC開始/停止トグル"""
+        if self.app.osc_handler.is_running:
+            self.app.stop_osc()
+            self.app.config.osc_enabled = False
+        else:
+            self.app.start_osc()
+            self.app.config.osc_enabled = True
+        self.app.config.save()
+        self._update_osc_display()
+
+    def _update_osc_display(self):
+        """OSC状態表示を更新"""
+        if self.app.osc_handler.is_running:
+            self.osc_status_label.setText("OSC: 動作中")
+            self.osc_status_label.setStyleSheet("color: #4CAF50;")
+            self.osc_btn.setText("OSC停止")
+        else:
+            self.osc_status_label.setText("OSC: 停止中")
+            self.osc_status_label.setStyleSheet("color: #888;")
+            self.osc_btn.setText("OSC開始")
+        self._update_osc_recv_display()
+
+    def _update_osc_recv_display(self):
+        """OSC受信値表示を更新"""
+        if self.app.osc_handler.is_running:
+            recv_val = self.app.osc_handler.last_recv_value
+            current = self.app.osc_handler.current_visibility
+            self.osc_recv_label.setText(f"受信値: {recv_val} / 現在: {current}")
+            self.osc_recv_label.setStyleSheet("color: #2196F3;")
+        else:
+            self.osc_recv_label.setText("受信値: -")
+            self.osc_recv_label.setStyleSheet("color: #888;")
 
     def _on_tray_activated(self, reason):
         """トレイアイコンクリック"""

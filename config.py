@@ -92,6 +92,11 @@ class AppConfig:
     notifications_enabled: bool = True
     watch_enabled: bool = False  # 監視状態を保存
 
+    # OSC設定
+    osc_enabled: bool = False  # OSC機能の有効/無効
+    osc_send_port: int = 9000  # VRCへの送信ポート
+    osc_recv_port: int = 9001  # VRCからの受信ポート
+
     # 認証情報（トークン保存）
     saved_token: Optional[str] = None
     saved_username: Optional[str] = None
