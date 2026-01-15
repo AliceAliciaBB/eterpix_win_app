@@ -14,6 +14,8 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QIcon
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
 from ui.main_window import MainWindow
 from core.watcher import ScreenshotWatcher
@@ -27,6 +29,16 @@ from config import AppConfig
 # 定数
 HEALTH_CHECK_INTERVAL_MS = 10 * 60 * 1000  # 10分
 DEBUG_LOG_INTERVAL_MS = 5000  # 5秒ごとにデバッグログ
+APP_UNIQUE_KEY = "EterPixVRCUploader_SingleInstance"
+
+
+def get_resource_path(relative_path: str) -> Path:
+    """リソースファイルのパスを取得（exe化対応）"""
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstallerでexe化された場合
+        return Path(sys._MEIPASS) / relative_path
+    # 通常実行の場合
+    return Path(__file__).parent / relative_path
 
 
 def log_debug(msg: str):
@@ -281,6 +293,7 @@ class VRCUploaderApp:
         result = await self.uploader.login(username, password)
         if result.get('status') == 'success':
             self.config.saved_token = self.uploader.token
+            self.config.saved_username = username
             self.config.save()
         return result
 
@@ -289,6 +302,7 @@ class VRCUploaderApp:
         result = await self.uploader.register(username, password)
         if result.get('status') == 'success':
             self.config.saved_token = self.uploader.token
+            self.config.saved_username = username
             self.config.save()
         return result
 
@@ -296,6 +310,7 @@ class VRCUploaderApp:
         """ログアウト"""
         self.uploader.token = None
         self.config.saved_token = None
+        self.config.saved_username = None
         self.config.save()
 
     # ========== オフラインキュー関連 ==========
@@ -452,9 +467,33 @@ def main():
     log_debug("=== Application starting ===")
     log_active_threads()
 
+    # 引数チェック：引数があればトレイに最小化して起動
+    start_minimized = len(sys.argv) > 1
+    if start_minimized:
+        log_debug(f"Starting minimized (args: {sys.argv[1:]})")
+
     app = QApplication(sys.argv)
+
+    # 多重起動チェック
+    socket = QLocalSocket()
+    socket.connectToServer(APP_UNIQUE_KEY)
+    if socket.waitForConnected(500):
+        # 既に起動中 - メッセージを送って終了
+        log_debug("Another instance is already running. Sending activation signal...")
+        socket.write(b"activate")
+        socket.waitForBytesWritten(1000)
+        socket.disconnectFromServer()
+        log_debug("Exiting duplicate instance.")
+        sys.exit(0)
+    socket.close()
     app.setApplicationName("EterPix VRC Uploader")
     app.setOrganizationName("EterPix")
+    app.setQuitOnLastWindowClosed(False)  # トレイに隠しても終了しない
+
+    # アプリケーションアイコン設定
+    icon_path = get_resource_path("etp.png")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
@@ -465,9 +504,54 @@ def main():
     uploader_app = VRCUploaderApp()
     log_debug("App initialized")
 
+    # 保存されたトークンでログイン復元（MainWindow作成前に実行）
+    if uploader_app.config.saved_token:
+        uploader_app.uploader.token = uploader_app.config.saved_token
+
     # メインウィンドウ
-    window = MainWindow(uploader_app)
-    window.show()
+    window = MainWindow(uploader_app, start_minimized=start_minimized)
+    if start_minimized:
+        # トレイに最小化して起動
+        window.hide()
+    else:
+        window.show()
+
+    # 多重起動防止用サーバー
+    server = QLocalServer()
+    server.removeServer(APP_UNIQUE_KEY)  # 残っていたソケットファイルを削除
+    if not server.listen(APP_UNIQUE_KEY):
+        log_debug(f"Failed to start local server: {server.errorString()}")
+
+    def on_new_connection():
+        client = server.nextPendingConnection()
+        if client:
+            client.readyRead.connect(lambda: handle_client_message(client))
+
+    def handle_client_message(client):
+        data = client.readAll().data()
+        log_debug(f"Received message from another instance: {data}")
+        if data == b"activate":
+            window._show_from_tray()
+        client.disconnectFromServer()
+
+    server.newConnection.connect(on_new_connection)
+    log_debug("Local server started for single instance check")
+
+    # ユーザー名が未保存の場合、サーバーから取得
+    async def fetch_username_if_needed():
+        if uploader_app.uploader.token and not uploader_app.config.saved_username:
+            try:
+                result = await uploader_app.uploader.get_me()
+                if result.get('status') == 'success':
+                    username = result.get('data', {}).get('username')
+                    if username:
+                        uploader_app.config.saved_username = username
+                        uploader_app.config.save()
+                        window._update_ui()
+            except Exception as e:
+                log_debug(f"Failed to fetch username: {e}")
+
+    QTimer.singleShot(500, lambda: asyncio.ensure_future(fetch_username_if_needed()))
 
     # ログ解析タイマー（1秒ごと）
     log_timer = QTimer()
@@ -498,9 +582,10 @@ def main():
     debug_timer.start(DEBUG_LOG_INTERVAL_MS)
     log_debug("All timers started")
 
-    # 保存されたトークンでログイン復元
-    if uploader_app.config.saved_token:
-        uploader_app.uploader.token = uploader_app.config.saved_token
+    # 保存された監視状態を復元
+    if uploader_app.config.watch_enabled:
+        uploader_app.start_watching()
+        window._update_ui()
 
     # 起動時に保留中のキューがあれば確認
     if uploader_app.offline_queue.has_pending_data():
@@ -513,6 +598,9 @@ def main():
     def on_quit():
         log_debug("=== on_quit called ===")
         log_active_threads()
+
+        log_debug("Closing local server...")
+        server.close()
 
         log_debug("Stopping watcher...")
         uploader_app.stop_watching()

@@ -10,27 +10,46 @@ from PyQt6.QtWidgets import (
     QGroupBox, QStatusBar, QSystemTrayIcon, QMenu,
     QMessageBox, QFileDialog, QApplication
 )
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtCore import Qt, QSize, QEvent
+from PyQt6.QtGui import QIcon, QAction, QPixmap
+from pathlib import Path
+import sys
+
+from config import is_startup_registered, register_startup, unregister_startup
+
+
+def get_resource_path(relative_path: str) -> Path:
+    """リソースファイルのパスを取得（exe化対応）"""
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstallerでexe化された場合
+        return Path(sys._MEIPASS) / relative_path
+    # 通常実行の場合
+    return Path(__file__).parent.parent / relative_path
 
 
 class MainWindow(QMainWindow):
     """メインウィンドウ"""
 
-    def __init__(self, app):
+    def __init__(self, app, start_minimized: bool = False):
         super().__init__()
         self.app = app
         self.app.add_callback(self._on_app_event)
+        self._start_minimized = start_minimized
 
         self._setup_ui()
-        # self._setup_tray()  # トレイアイコン未実装
-        self.tray = None
+        self._setup_tray()
         self._update_ui()
 
     def _setup_ui(self):
         """UIセットアップ"""
         self.setWindowTitle("EterPix VRC Uploader")
         self.setMinimumSize(400, 500)
+
+        # ウィンドウアイコン設定
+        icon_path = get_resource_path("etp.png")
+        pixmap = QPixmap(str(icon_path))
+        if not pixmap.isNull():
+            self.setWindowIcon(QIcon(pixmap))
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -123,6 +142,15 @@ class MainWindow(QMainWindow):
         visibility_row.addWidget(self.visibility_combo)
         settings_layout.addLayout(visibility_row)
 
+        # スタートアップ設定
+        startup_row = QHBoxLayout()
+        startup_row.addWidget(QLabel("スタートアップ:"))
+        self.startup_btn = QPushButton()
+        self._update_startup_button()
+        self.startup_btn.clicked.connect(self._on_toggle_startup)
+        startup_row.addWidget(self.startup_btn)
+        settings_layout.addLayout(startup_row)
+
         layout.addWidget(settings_group)
 
         # ===== 状態セクション =====
@@ -192,13 +220,20 @@ class MainWindow(QMainWindow):
     def _setup_tray(self):
         """システムトレイセットアップ"""
         self.tray = QSystemTrayIcon(self)
-        # アイコンがない場合はデフォルト
-        # self.tray.setIcon(QIcon("icon.png"))
+
+        # アイコン設定
+        icon_path = get_resource_path("etp.png")
+        pixmap = QPixmap(str(icon_path))
+        if pixmap.isNull():
+            # フォールバック：ウィンドウアイコンを使用
+            self.tray.setIcon(self.windowIcon())
+        else:
+            self.tray.setIcon(QIcon(pixmap))
 
         menu = QMenu()
 
         show_action = QAction("表示", self)
-        show_action.triggered.connect(self.show)
+        show_action.triggered.connect(self._show_from_tray)
         menu.addAction(show_action)
 
         menu.addSeparator()
@@ -209,9 +244,8 @@ class MainWindow(QMainWindow):
 
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._on_tray_activated)
-
-        if self.app.config.minimize_to_tray:
-            self.tray.show()
+        self.tray.setToolTip("EterPix VRC Uploader")
+        self.tray.show()
 
     def _update_ui(self):
         """UI状態を更新"""
@@ -225,7 +259,8 @@ class MainWindow(QMainWindow):
         self.logout_btn.setVisible(logged_in)
 
         if logged_in:
-            self.login_status.setText("ログイン済み")
+            username = self.app.config.saved_username or "ユーザー"
+            self.login_status.setText(f"ログイン中: {username}")
             self.login_status.setStyleSheet("color: #4CAF50;")
         else:
             self.login_status.setText("未ログイン")
@@ -374,12 +409,38 @@ class MainWindow(QMainWindow):
         self.app.config.default_visibility = value
         self.app.config.save()
 
+    def _update_startup_button(self):
+        """スタートアップボタンの表示を更新"""
+        if is_startup_registered():
+            self.startup_btn.setText("登録解除")
+            self.startup_btn.setStyleSheet("color: #F44336;")
+        else:
+            self.startup_btn.setText("登録")
+            self.startup_btn.setStyleSheet("")
+
+    def _on_toggle_startup(self):
+        """スタートアップ登録/解除"""
+        if is_startup_registered():
+            if unregister_startup():
+                self.statusbar.showMessage("スタートアップから解除しました")
+            else:
+                QMessageBox.warning(self, "エラー", "スタートアップの解除に失敗しました")
+        else:
+            if register_startup():
+                self.statusbar.showMessage("スタートアップに登録しました")
+            else:
+                QMessageBox.warning(self, "エラー", "スタートアップの登録に失敗しました")
+        self._update_startup_button()
+
     def _on_toggle_watch(self):
         """監視トグル"""
         if self.app.watcher.is_running:
             self.app.stop_watching()
+            self.app.config.watch_enabled = False
         else:
             self.app.start_watching()
+            self.app.config.watch_enabled = True
+        self.app.config.save()
         self._update_ui()
 
     def _on_check_server(self):
@@ -438,8 +499,26 @@ class MainWindow(QMainWindow):
     def _on_tray_activated(self, reason):
         """トレイアイコンクリック"""
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self.show()
-            self.activateWindow()
+            self._show_from_tray()
+
+    def _show_from_tray(self):
+        """トレイから表示"""
+        self.show()
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _hide_to_tray(self):
+        """トレイに隠す"""
+        self.hide()
+        self.tray.show()
+        self.tray.showMessage(
+            "EterPix VRC Uploader",
+            "タスクトレイで動作中です",
+            QSystemTrayIcon.MessageIcon.Information,
+            2000
+        )
+
 
     def _quit_app(self):
         """アプリケーション終了"""
@@ -460,6 +539,26 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """ウィンドウクローズ"""
-        print("[MainWindow] closeEvent: quitting app", flush=True)
-        event.accept()
-        self._do_quit()
+        # ポップアップで選択
+        msg = QMessageBox(self)
+        msg.setWindowTitle("終了確認")
+        msg.setText("アプリケーションをどうしますか？")
+        msg.setIcon(QMessageBox.Icon.Question)
+
+        tray_btn = msg.addButton("タスクトレイにしまう", QMessageBox.ButtonRole.ActionRole)
+        quit_btn = msg.addButton("終了する", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = msg.addButton("キャンセル", QMessageBox.ButtonRole.RejectRole)
+
+        msg.exec()
+
+        clicked = msg.clickedButton()
+        if clicked == tray_btn:
+            event.ignore()
+            self._hide_to_tray()
+        elif clicked == quit_btn:
+            print("[MainWindow] closeEvent: quitting app", flush=True)
+            event.accept()
+            self._do_quit()
+        else:
+            # キャンセル
+            event.ignore()

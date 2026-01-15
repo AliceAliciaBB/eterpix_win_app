@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('etp.png', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
