@@ -28,11 +28,6 @@ class ImageProcessor:
         with Image.open(png_path) as img:
             width, height = img.size
 
-            # 縦長画像は90度回転
-            if height > width:
-                img = img.rotate(-90, expand=True)
-                width, height = img.size
-
             # カメラグリッドデータを抽出（変換前に）
             camera_data = self._decode_camera_grid(png_path, width, height)
 
