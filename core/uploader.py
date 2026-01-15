@@ -122,7 +122,7 @@ class UploaderClient:
             files = {'image': (filename, jpg_bytes, 'image/jpeg')}
             data = {
                 'visibility': visibility,
-                'taken_at': (taken_at or datetime.now()).isoformat()
+                'taken_at': (taken_at or datetime.utcnow()).isoformat() + 'Z'
             }
 
             if world_id:
