@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(tasklist:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(python:*)",
+      "Bash(pyinstaller:*)"
     ]
   }
 }

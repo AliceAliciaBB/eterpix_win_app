@@ -1,4 +1,4 @@
-('E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - コピー\\build\\EterPix '
+('E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - コピー\\build\\EterPix '
  'VRC Uploader\\PYZ-00.pyz',
  [('PIL',
    'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PIL\\__init__.py',
@@ -525,6 +525,30 @@
   ('certifi.core',
    'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\certifi\\core.py',
    'PYMODULE'),
+  ('charset_normalizer',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\__init__.py',
+   'PYMODULE'),
+  ('charset_normalizer.api',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\api.py',
+   'PYMODULE'),
+  ('charset_normalizer.cd',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\cd.py',
+   'PYMODULE'),
+  ('charset_normalizer.constant',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\constant.py',
+   'PYMODULE'),
+  ('charset_normalizer.legacy',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\legacy.py',
+   'PYMODULE'),
+  ('charset_normalizer.models',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\models.py',
+   'PYMODULE'),
+  ('charset_normalizer.utils',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\utils.py',
+   'PYMODULE'),
+  ('charset_normalizer.version',
+   'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\charset_normalizer\\version.py',
+   'PYMODULE'),
   ('click',
    'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\click\\__init__.py',
    'PYMODULE'),
@@ -646,7 +670,7 @@
    'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\concurrent\\interpreters\\_queues.py',
    'PYMODULE'),
   ('config',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - コピー\\config.py',
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - コピー\\config.py',
    'PYMODULE'),
   ('contextlib',
    'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\contextlib.py',
@@ -658,31 +682,31 @@
    'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\copy.py',
    'PYMODULE'),
   ('core',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\core\\__init__.py',
    'PYMODULE'),
   ('core.image_processor',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\core\\image_processor.py',
    'PYMODULE'),
   ('core.log_parser',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\core\\log_parser.py',
    'PYMODULE'),
   ('core.offline_queue',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\core\\offline_queue.py',
    'PYMODULE'),
   ('core.osc_handler',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\core\\osc_handler.py',
    'PYMODULE'),
   ('core.uploader',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\core\\uploader.py',
    'PYMODULE'),
   ('core.watcher',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\core\\watcher.py',
    'PYMODULE'),
   ('csv',
@@ -1817,11 +1841,11 @@
    'C:\\Users\\alicilia_main\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\typing_extensions.py',
    'PYMODULE'),
   ('ui',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\ui\\__init__.py',
    'PYMODULE'),
   ('ui.main_window',
-   'E:\\EterPix\\20260115-flask-VRCSNSWEB-v3\\vrc_uploader - '
+   'E:\\EterPix\\20260116-flask-VRCSNSWEB-v3\\vrc_uploader - '
    'コピー\\ui\\main_window.py',
    'PYMODULE'),
   ('unittest',

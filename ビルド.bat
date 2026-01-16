@@ -1,4 +1,16 @@
 @echo off
-rmdir /s /y %~dp0build
-pyinstaller "EterPix VRC Uploader.spec"
+echo EterPix VRC Uploader をビルドします...
+echo.
+
+REM 実行中のプロセスを終了
+taskkill /F /IM "EterPix VRC Uploader.exe" 2>nul
+
+REM ビルドフォルダを削除
+rmdir /s /q "%~dp0build" 2>nul
+
+REM PyInstallerでビルド
+pyinstaller "EterPix VRC Uploader.spec" --noconfirm
+
+echo.
+echo ビルド完了！
 pause

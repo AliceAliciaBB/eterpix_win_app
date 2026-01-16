@@ -1,6 +1,6 @@
 """
 OSC Handler
-VRChat OSC通信による公開範囲変更
+VRChat OSC通信による公開範囲変更（単一変数方式）
 """
 
 import threading
@@ -8,27 +8,27 @@ from typing import Callable, Optional
 from pythonosc import udp_client, dispatcher, osc_server
 
 
-# OSCアドレス定義
-OSC_PARAM_SEND = "/avatar/parameters/EterPixVisibility"  # アプリ→VRC（送信）
-OSC_PARAM_RECV = "/avatar/parameters/EterPixVisibilitySelect"  # VRC→アプリ（受信）
+# OSCアドレス（送受信共通）
+OSC_PARAM = "/avatar/parameters/EterPixVisibility"
 
 # 公開範囲マッピング（int値 ↔ visibility文字列）
-# 送信時: 101以降でアプリ→VRCに現在の公開範囲を通知
-# 受信時: 1以降でVRC→アプリに選択された公開範囲を受信
+# 0 = OSC無効/変数なしアバター
+# 1 = リセット（アバター変更）
+# 2-6 = 公開範囲
 VISIBILITY_TO_OSC = {
-    'self': 101,
-    'friends': 102,
-    'instance_friends': 103,
-    'instance': 104,
-    'public': 105,
+    'self': 2,
+    'friends': 3,
+    'instance_friends': 4,
+    'instance': 5,
+    'public': 6,
 }
 
 OSC_TO_VISIBILITY = {
-    1: 'self',
-    2: 'friends',
-    3: 'instance_friends',
-    4: 'instance',
-    5: 'public',
+    2: 'self',
+    3: 'friends',
+    4: 'instance_friends',
+    5: 'instance',
+    6: 'public',
 }
 
 
@@ -87,7 +87,7 @@ class OSCHandler:
 
             # 受信サーバー作成
             disp = dispatcher.Dispatcher()
-            disp.map(OSC_PARAM_RECV, self._handle_recv)
+            disp.map(OSC_PARAM, self._handle_recv)
 
             self._server = osc_server.ThreadingOSCUDPServer(
                 (self.host, self.recv_port),
@@ -105,8 +105,8 @@ class OSCHandler:
             self._running = True
             print(f"[OSC] Started - Send: {self.host}:{self.send_port}, Recv: {self.host}:{self.recv_port}")
 
-            # 初期状態を送信（100 = 待機/接続確認）
-            self.send_status(100)
+            # 初期状態を送信
+            self.send_visibility(self._current_visibility)
 
         except Exception as e:
             print(f"[OSC] Failed to start: {e}")
@@ -132,40 +132,40 @@ class OSCHandler:
             print(f"[OSC] Error stopping: {e}")
 
     def send_visibility(self, visibility: str):
-        """公開範囲をVRCに送信（101以降）"""
+        """公開範囲をVRCに送信（2-6）"""
         if not self._client:
             return
 
-        osc_value = VISIBILITY_TO_OSC.get(visibility, 101)
+        osc_value = VISIBILITY_TO_OSC.get(visibility, 2)
         self._current_visibility = visibility
 
         try:
-            self._client.send_message(OSC_PARAM_SEND, osc_value)
+            self._client.send_message(OSC_PARAM, osc_value)
             print(f"[OSC] Sent visibility: {visibility} -> {osc_value}")
         except Exception as e:
             print(f"[OSC] Send error: {e}")
-
-    def send_status(self, value: int):
-        """ステータス値を送信"""
-        if not self._client:
-            return
-
-        try:
-            self._client.send_message(OSC_PARAM_SEND, value)
-            print(f"[OSC] Sent status: {value}")
-        except Exception as e:
-            print(f"[OSC] Send status error: {e}")
 
     def _handle_recv(self, address: str, value: int):
         """VRCからの受信を処理"""
         print(f"[OSC] Received: {address} = {value}")
         self._last_recv_value = value
 
-        # 有効な値か確認
+        # value = 0: OSC無効/変数なしアバター → 無視
+        if value == 0:
+            print(f"[OSC] OSC disabled or no parameter, ignoring")
+            return
+
+        # value = 1: アバター変更でリセット → 現在値を再送信
+        if value == 1:
+            print(f"[OSC] Avatar reset detected, resending: {self._current_visibility}")
+            self.send_visibility(self._current_visibility)
+            return
+
+        # 有効な値 (2-6)
         if value in OSC_TO_VISIBILITY:
             new_visibility = OSC_TO_VISIBILITY[value]
 
-            # 変更があった場合のみコールバック
+            # 変更があった場合のみ処理
             if new_visibility != self._current_visibility:
                 self._current_visibility = new_visibility
                 print(f"[OSC] Visibility changed to: {new_visibility}")
@@ -173,5 +173,5 @@ class OSCHandler:
                 if self._on_visibility_changed:
                     self._on_visibility_changed(new_visibility)
 
-                # 確認のため、変更後の値を送り返す
+                # 確認のため送り返す
                 self.send_visibility(new_visibility)

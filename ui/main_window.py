@@ -175,10 +175,8 @@ class MainWindow(QMainWindow):
 
         # OSC説明
         osc_help = QLabel(
-            "送信パラメータ: EterPixVisibility (int)\n"
-            "  100=待機, 101=自分のみ, 102=フレンド, 103=インスタンス&フレンド, 104=インスタンス, 105=パブリック\n"
-            "受信パラメータ: EterPixVisibilitySelect (int)\n"
-            "  1=自分のみ, 2=フレンド, 3=インスタンス&フレンド, 4=インスタンス, 5=パブリック"
+            "パラメータ: EterPixVisibility (int)\n"
+            "  0=無効, 1=リセット, 2=自分のみ, 3=フレンド, 4=インスタンス&フレンド, 5=インスタンス, 6=パブリック"
         )
         osc_help.setStyleSheet("color: #666; font-size: 10px;")
         osc_help.setWordWrap(True)
